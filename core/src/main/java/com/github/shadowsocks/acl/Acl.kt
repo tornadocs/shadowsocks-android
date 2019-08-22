@@ -25,13 +25,14 @@ import android.util.Log
 import androidx.recyclerview.widget.SortedList
 import com.crashlytics.android.Crashlytics
 import com.github.shadowsocks.Core
+import com.github.shadowsocks.net.Subnet
 import com.github.shadowsocks.preference.DataStore
-import com.github.shadowsocks.utils.Subnet
 import com.github.shadowsocks.utils.asIterable
 import java.io.File
 import java.io.IOException
 import java.io.Reader
 import java.net.URL
+import java.net.URLConnection
 
 class Acl {
     companion object {
@@ -120,8 +121,7 @@ class Acl {
                 val blocks = (line as java.lang.String).split("#", 2)
                 val url = networkAclParser.matchEntire(blocks.getOrElse(1) { "" })?.groupValues?.getOrNull(1)
                 if (url != null) urls.add(URL(url))
-                val input = blocks[0].trim()
-                when (input) {
+                when (val input = blocks[0].trim()) {
                     "[outbound_block_list]" -> {
                         hostnames = null
                         subnets = null
@@ -151,15 +151,10 @@ class Acl {
         fromReader(getFile(id).bufferedReader())
     } catch (_: IOException) { this }
 
-    fun flatten(depth: Int): Acl {
+    suspend fun flatten(depth: Int, connect: suspend (URL) -> URLConnection): Acl {
         if (depth > 0) for (url in urls.asIterable()) {
-            val child = Acl()
-            try {
-                child.fromReader(url.openStream().bufferedReader(), bypass).flatten(depth - 1)
-            } catch (e: IOException) {
-                e.printStackTrace()
-                continue
-            }
+            val child = Acl().fromReader(connect(url).getInputStream().bufferedReader(), bypass)
+            child.flatten(depth - 1, connect)
             if (bypass != child.bypass) {
                 Crashlytics.log(Log.WARN, TAG, "Imported network ACL has a conflicting mode set. " +
                         "This will probably not work as intended. URL: $url")

@@ -23,6 +23,7 @@ package com.github.shadowsocks.bg
 import android.app.Service
 import android.content.Intent
 import com.github.shadowsocks.Core
+import com.github.shadowsocks.net.HostsFile
 import com.github.shadowsocks.preference.DataStore
 import java.io.File
 
@@ -36,21 +37,7 @@ class TransproxyService : Service(), LocalDnsService.Interface {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int =
             super<LocalDnsService.Interface>.onStartCommand(intent, flags, startId)
 
-    private suspend fun startDNSTunnel() {
-        val proxy = data.proxy!!
-        val cmd = arrayListOf(File(applicationInfo.nativeLibraryDir, Executable.SS_TUNNEL).absolutePath,
-                "-t", "10",
-                "-b", DataStore.listenAddress,
-                "-u",
-                "-l", DataStore.portLocalDns.toString(),    // ss-tunnel listens on the same port as overture
-                "-L", proxy.profile.remoteDns.split(",").first().trim() + ":53",
-                // config is already built by BaseService.Interface
-                "-c", (data.udpFallback ?: proxy).configFile!!.absolutePath)
-        if (DataStore.tcpFastOpen) cmd += "--fast-open"
-        data.processes!!.start(cmd)
-    }
-
-    private suspend fun startRedsocksDaemon() {
+    private fun startRedsocksDaemon() {
         File(Core.deviceStorage.noBackupFilesDir, "redsocks.conf").writeText("""base {
  log_debug = off;
  log_info = off;
@@ -70,10 +57,9 @@ redsocks {
                 File(applicationInfo.nativeLibraryDir, Executable.REDSOCKS).absolutePath, "-c", "redsocks.conf"))
     }
 
-    override suspend fun startProcesses() {
+    override suspend fun startProcesses(hosts: HostsFile) {
         startRedsocksDaemon()
-        super.startProcesses()
-        if (data.proxy!!.profile.udpdns) startDNSTunnel()
+        super.startProcesses(hosts)
     }
 
     override fun onDestroy() {

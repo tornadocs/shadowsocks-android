@@ -17,7 +17,6 @@ def getCurrentFlavor() {
 }
 
 android {
-    buildToolsVersion rootProject.buildToolsVersion
     compileSdkVersion rootProject.compileSdkVersion
     defaultConfig {
         applicationId "com.github.shadowsocks.tv"
@@ -25,8 +24,7 @@ android {
         targetSdkVersion rootProject.sdkVersion
         versionCode rootProject.versionCode
         versionName rootProject.versionName
-        testApplicationId "com.github.shadowsocks.tv.test"
-        resConfigs "fa", "fr", "ja", "ko", "ru", "tr", "zh-rCN", "zh-rTW"
+        resConfigs rootProject.resConfigs
     }
     buildTypes {
         debug {
@@ -39,7 +37,12 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
-    lintOptions.checkReleaseBuilds false
+    compileOptions {
+        sourceCompatibility javaVersion
+        targetCompatibility javaVersion
+    }
+    kotlinOptions.jvmTarget = javaVersion
+    packagingOptions.exclude '**/*.kotlin_*'
     splits {
         abi {
             enable true
@@ -48,13 +51,12 @@ android {
     }
     sourceSets.main.jniLibs.srcDirs +=
             new File(project(':core').buildDir, "intermediates/bundles/${getCurrentFlavor()}/jni")
-    sourceSets.main.jniLibs.srcDirs += new File(project(':core').projectDir, "build/go")
 }
 
 dependencies {
     implementation project(':core')
     implementation fileTree(dir: 'libs', include: ['*.jar'])
-    implementation "androidx.leanback:leanback-preference:1.0.0"
+    implementation "androidx.leanback:leanback-preference:1.1.0-alpha02"
 }
 
 apply plugin: 'com.google.gms.google-services'

@@ -22,8 +22,10 @@ package com.github.shadowsocks.acl
 
 import android.content.Context
 import androidx.work.*
-import kotlinx.coroutines.Dispatchers
+import com.github.shadowsocks.Core
+import com.github.shadowsocks.utils.useCancellable
 import java.io.IOException
+import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.TimeUnit
 
@@ -31,7 +33,8 @@ class AclSyncer(context: Context, workerParams: WorkerParameters) : CoroutineWor
     companion object {
         private const val KEY_ROUTE = "route"
 
-        fun schedule(route: String) = WorkManager.getInstance().enqueue(OneTimeWorkRequestBuilder<AclSyncer>().run {
+        fun schedule(route: String) = WorkManager.getInstance(Core.deviceStorage).enqueueUniqueWork(
+                route, ExistingWorkPolicy.REPLACE, OneTimeWorkRequestBuilder<AclSyncer>().run {
             setInputData(Data.Builder().putString(KEY_ROUTE, route).build())
             setConstraints(Constraints.Builder()
                     .setRequiredNetworkType(NetworkType.UNMETERED)
@@ -42,16 +45,14 @@ class AclSyncer(context: Context, workerParams: WorkerParameters) : CoroutineWor
         })
     }
 
-    override val coroutineContext get() = Dispatchers.IO
-
     override suspend fun doWork(): Result = try {
         val route = inputData.getString(KEY_ROUTE)!!
-        val acl = URL("https://shadowsocks.org/acl/android/v1/$route.acl").openStream().bufferedReader()
-                .use { it.readText() }
+        val connection = URL("https://shadowsocks.org/acl/android/v1/$route.acl").openConnection() as HttpURLConnection
+        val acl = connection.useCancellable { inputStream.bufferedReader().use { it.readText() } }
         Acl.getFile(route).printWriter().use { it.write(acl) }
         Result.success()
     } catch (e: IOException) {
         e.printStackTrace()
-        Result.retry()
+        if (runAttemptCount > 5) Result.failure() else Result.retry()
     }
 }
